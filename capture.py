@@ -14,16 +14,33 @@ from PIL import Image
 # 1. 페이지 레이아웃 및 디자인
 st.set_page_config(page_title="YBM AI Lab 썸네일 도구", layout="centered")
 
+# CSS 수정: 다크모드 대응 및 UI 개선
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #4CAF50; color: white; font-weight: bold; }
-    .stTextArea>div>div>textarea { background-color: #f0f2f6; font-family: monospace; }
-    .result-box { background-color: #e8f5e9; padding: 15px; border-radius: 10px; border: 1px solid #4CAF50; }
+    /* 버튼 스타일 */
+    .stButton>button { 
+        width: 100%; border-radius: 5px; height: 3em; 
+        background-color: #4CAF50; color: white !important; font-weight: bold; 
+    }
+    /* URL 입력창: 다크모드에서도 잘 보이도록 배경과 글자색 고정 */
+    .stTextArea textarea { 
+        font-family: 'Courier New', monospace !important; 
+        color: #1E1E1E !important; /* 진한 검정색 글자 */
+        background-color: #FFFFFF !important; /* 흰색 배경 고정 */
+    }
+    /* 결과 목록 창 스타일 */
+    .result-list {
+        background-color: #F1F8E9;
+        color: #2E7D32;
+        padding: 10px;
+        border-radius: 5px;
+        font-family: monospace;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📸 스마트 섬네일 생성기 v2")
-st.caption("예시 파일명 하나만 입력하면 번호를 자동으로 매겨드립니다.")
+st.title("📸 스마트 섬네일 생성기 v2.1")
+st.caption("AI Content Architect를 위한 업무 자동화 도구")
 
 # 2. 사이드바 설정
 st.sidebar.header("⚙️ 작업 설정")
@@ -40,30 +57,32 @@ if input_method == "📁 엑셀 파일 업로드":
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
 else:
-    raw_urls = st.text_area("개발사에서 받은 URL 뭉치를 붙여넣으세요", height=150, placeholder="https://...\nhttps://...")
-    example_name = st.text_input("예시 파일명을 입력하세요", value="e_english_k_5_0001", help="번호가 포함된 첫 번째 파일명을 입력하세요.")
+    raw_urls = st.text_area("개발사에서 받은 URL 뭉치를 붙여넣으세요 (줄바꿈이나 공백으로 구분)", height=200)
+    
+    st.info("💡 예시 파일명을 하나만 입력하면 뒤의 숫자를 자동으로 매겨줍니다.")
+    example_name = st.text_input("기준 파일명 입력 (예: e_english_k_5_0001)", value="e_english_k_5_0001")
     
     if raw_urls and example_name:
-        # URL 추출
+        # URL 추출 (공백, 줄바꿈 무시하고 http로 시작하는 것만)
         url_list = [u.strip() for u in re.split(r'\s+', raw_urls) if u.strip().startswith('http')]
         
-        # 파일명 자동 생성 로직 (정규표현식으로 숫자 부분 분리)
+        # 파일명 자동 생성 로직 (마지막 숫자 부분을 찾아서 증폭)
         match = re.search(r'(.*?)(\d+)$', example_name)
         if match:
-            prefix = match.group(1) # e_english_k_5_
-            start_num_str = match.group(2) # 0001
-            num_len = len(start_num_str) # 4자릿수 보존
+            prefix = match.group(1)     # 예: e_english_k_5_
+            start_num_str = match.group(2) # 예: 0001
+            num_len = len(start_num_str)   # 자릿수 유지 (4자리)
             start_num = int(start_num_str)
             
             names = [f"{prefix}{str(start_num + i).zfill(num_len)}" for i in range(len(url_list))]
             df = pd.DataFrame({"파일명": names, "URL": url_list})
-            st.success(f"총 {len(df)}개의 URL과 파일명이 준비되었습니다.")
+            st.success(f"✅ 총 {len(df)}개의 URL이 감지되었습니다.")
         else:
-            st.error("파일명 끝에 숫자가 포함되어야 자동으로 번호를 매길 수 있습니다.")
+            st.warning("⚠️ 파일명 끝에 숫자가 있어야 자동으로 번호를 매길 수 있습니다.")
 
-# 4. 캡처 로직
+# 4. 캡처 및 저장 로직
 if not df.empty:
-    with st.expander("📂 생성될 파일 목록 미리보기"):
+    with st.expander("📂 생성될 파일 목록 확인"):
         st.dataframe(df, use_container_width=True)
     
     def get_driver():
@@ -105,23 +124,28 @@ if not df.empty:
                         zip_file.writestr(f"{file_name}.jpg", img_byte_arr.getvalue())
                     except Exception as e:
                         st.error(f"❌ {file_name} 실패: {e}")
+                    
                     progress_bar.progress((index + 1) / len(df))
             
             driver.quit()
-            st.success("✨ 모든 작업이 완료되었습니다!")
+            st.success("✨ 모든 섬네일 생성이 완료되었습니다!")
             st.balloons()
             
             # 다운로드 버튼
-            st.download_button(label=f"📂 {folder_name}.zip 다운로드", data=zip_buffer.getvalue(), file_name=f"{folder_name}.zip", mime="application/zip")
+            st.download_button(
+                label=f"📂 {folder_name}.zip 다운로드",
+                data=zip_buffer.getvalue(),
+                file_name=f"{folder_name}.zip",
+                mime="application/zip"
+            )
             
-            # 5. 개발사 전달용 목록 생성 (파일명.jpg)
+            # 5. 개발사 전달용 목록 (.jpg 붙이기)
             st.divider()
-            st.subheader("📋 개발사 전달용 파일명 목록")
-            st.info("아래 목록을 복사해서 그대로 전달하세요.")
-            # .jpg를 붙인 목록 생성
-            jpg_names = "\n".join([f"{name}.jpg" for name in df['파일명']])
-            st.text_area("파일명 목록 (복사 가능)", value=jpg_names, height=200)
+            st.subheader("📋 개발사 전달용 목록")
+            st.info("아래 내용을 복사하여 개발사에 전달하세요 (.jpg 포함)")
+            delivery_list = "\n".join([f"{n}.jpg" for n in df['파일명']])
+            st.text_area("파일명 목록 (복사 가능)", value=delivery_list, height=200)
 
         except Exception as global_e:
-            st.error(f"오류 발생: {global_e}")
+            st.error(f"시스템 오류 발생: {global_e}")
             if 'driver' in locals(): driver.quit()
