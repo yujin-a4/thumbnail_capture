@@ -1,0 +1,6 @@
+streamlit
+pandas
+selenium
+pillow
+openpyxl
+webdriver-manager
